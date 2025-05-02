@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sirkel/main.dart';
 import 'package:sirkel/widgets/custom_button.dart';
 import 'package:sirkel/widgets/custom_text_field.dart';
 import 'package:sirkel/screens/auth/register_screen.dart';
 import 'package:sirkel/screens/home_screen.dart';
-import 'package:sirkel/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,91 +14,16 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with SingleTickerProviderStateMixin {
-  // Controllers & state
+class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Animation fields
-  late final AnimationController _animController;
-  late Animation<Color?> _bgColorAnim;
-  late Animation<Alignment> _iconAlignAnim;
-  late Animation<Color?> _iconColorAnim;
-  late Animation<double> _fieldsOpacityAnim;
-
-  bool _animationsInitialized = false; // guard to only init once
-
-  @override
-  void initState() {
-    super.initState();
-    // Only create the controller here
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (!_animationsInitialized) {
-      // 1️⃣ Background: primary → white
-      _bgColorAnim = ColorTween(
-        begin: AppColors.primary,
-        end: Colors.white,
-      ).animate(
-        CurvedAnimation(
-          parent: _animController,
-          curve: const Interval(0.5, 1.0, curve: Curves.ease),
-        ),
-      );
-
-      // 2️⃣ Icon slides from center to slightly up
-      _iconAlignAnim = AlignmentTween(
-        begin: Alignment.center,
-        end: const Alignment(0, -0.6),
-      ).animate(
-        CurvedAnimation(
-          parent: _animController,
-          curve: const Interval(0.2, 0.7, curve: Curves.fastOutSlowIn),
-        ),
-      );
-
-      // 3️⃣ Icon color from white → primary
-      _iconColorAnim = ColorTween(
-        begin: Colors.white,
-        end: AppColors.primary,
-      ).animate(
-        CurvedAnimation(
-          parent: _animController,
-          curve: const Interval(0.3, 0.6, curve: Curves.easeIn),
-        ),
-      );
-
-      // 4️⃣ Fields fade in
-      _fieldsOpacityAnim = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(
-          parent: _animController,
-          curve: const Interval(0.6, 1.0, curve: Curves.easeIn),
-        ),
-      );
-
-      // Kick off the animation
-      _animController.forward();
-
-      _animationsInitialized = true;
-    }
-  }
-
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _animController.dispose();
     super.dispose();
   }
 
@@ -107,11 +32,13 @@ class _LoginScreenState extends State<LoginScreen>
       _isLoading = true;
       _errorMessage = null;
     });
+
     try {
-      final res = await Supabase.instance.client.auth.signInWithPassword(
+      final AuthResponse res = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+
       if (res.user != null) {
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
@@ -134,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen>
         customMsg = e.message;
       }
       if (mounted) setState(() => _errorMessage = customMsg);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _errorMessage = 'Terjadi kesalahan tak terduga. Silakan coba lagi.';
@@ -147,92 +74,66 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animController,
-      builder: (context, _) {
-        return Scaffold(
-          backgroundColor: _bgColorAnim.value,
-          body: SafeArea(
-            child: Stack(
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Form, fading in
-                Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Opacity(
-                      opacity: _fieldsOpacityAnim.value,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 120),
-                          const Text(
-                            'Sistem Informasi Reminder Kelas & E-learning',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 48),
-                          CustomTextField(
-                            controller: _emailController,
-                            hintText: 'Email',
-                            prefixIcon: Icons.email,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          const SizedBox(height: 16),
-                          CustomTextField(
-                            controller: _passwordController,
-                            hintText: 'Kata Sandi',
-                            prefixIcon: Icons.lock,
-                            obscureText: true,
-                          ),
-                          if (_errorMessage != null) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              style: const TextStyle(color: Colors.red),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          CustomButton(
-                            text: 'Masuk',
-                            isLoading: _isLoading,
-                            onPressed: _signIn,
-                          ),
-                          const SizedBox(height: 16),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                CupertinoPageRoute(
-                                  builder: (_) => const RegisterScreen(),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Belum punya akun? Daftar Sekarang',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                const Icon(Icons.school, size: 80, color: Color(0xFF1a73e8)),
+                const SizedBox(height: 24),
+                const Text(
+                  'Sistem Informasi Reminder Kelas & E-learning',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-                // Animated icon
-                AlignTransition(
-                  alignment: _iconAlignAnim,
-                  child: Icon(
-                    Icons.school,
-                    size: 80,
-                    color: _iconColorAnim.value,
+                const SizedBox(height: 48),
+                CustomTextField(
+                  controller: _emailController,
+                  hintText: 'Email',
+                  prefixIcon: Icons.email,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                CustomTextField(
+                  controller: _passwordController,
+                  hintText: 'Kata Sandi',
+                  prefixIcon: Icons.lock,
+                  obscureText: true,
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
                   ),
+                ],
+                const SizedBox(height: 24),
+                CustomButton(
+                  text: 'Masuk',
+                  isLoading: _isLoading,
+                  onPressed: _signIn,
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (_) => const RegisterScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Belum punya akun? Daftar Sekarang'),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

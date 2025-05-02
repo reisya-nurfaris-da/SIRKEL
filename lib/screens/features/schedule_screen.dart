@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:sirkel/main.dart';
 import 'package:sirkel/models/schedule.dart';
-import 'package:sirkel/theme/app_theme.dart';
 import 'package:sirkel/utils/constants.dart';
 import 'package:sirkel/widgets/custom_button.dart';
 import 'package:sirkel/widgets/custom_text_field.dart';
@@ -518,7 +517,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     eventLoader: _getSchedulesForDay,
                     calendarStyle: CalendarStyle(
                       markerDecoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: Theme.of(context).colorScheme.primary,
                         shape: BoxShape.circle,
                       ),
                     ),

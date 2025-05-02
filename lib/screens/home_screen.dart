@@ -7,7 +7,6 @@ import 'package:sirkel/screens/features/schedule_screen.dart';
 import 'package:sirkel/screens/features/contacts_screen.dart';
 import 'package:sirkel/screens/features/announcements_screen.dart';
 import 'package:sirkel/screens/profile_screen.dart';
-import 'package:sirkel/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -68,7 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.light, AppColors.primary],
+                colors: [
+                  Color(0xFF2FA7ED),
+                  Color(0xFF1A73E8),
+                ],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
@@ -76,7 +78,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           title: const Text(
             'SIRKEL',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           iconTheme: const IconThemeData(color: Colors.white),
           backgroundColor: Colors.transparent,
@@ -112,7 +117,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.light, AppColors.primary],
+                  colors: [
+                    Color(0xFF2FA7ED),
+                    Color(0xFF1A73E8),
+                  ],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
@@ -182,13 +190,22 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.task), label: 'Tugas'),
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Materi'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.task),
+            label: 'Tugas',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.book),
+            label: 'Materi',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: 'Jadwal',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.contacts), label: 'Kontak'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.contacts),
+            label: 'Kontak',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.announcement),
             label: 'Pengumuman',
