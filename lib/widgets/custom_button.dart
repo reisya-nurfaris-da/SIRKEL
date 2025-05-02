@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sirkel/theme/app_theme.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
@@ -15,10 +16,7 @@ class CustomButton extends StatelessWidget {
   });
 
   static const _gradient = LinearGradient(
-    colors: [
-      Color(0xFF2FA7ED),
-      Color(0xFF1A73E8),
-    ],
+    colors: [AppColors.light, AppColors.primary],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -51,21 +49,23 @@ class CustomButton extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(100),
             ),
-          ).copyWith(
-            overlayColor: _overlayColor,
-          ),
-          child: isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+          ).copyWith(overlayColor: _overlayColor),
+          child:
+              isLoading
+                  ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                  : Text(
+                    text,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
-                )
-              : Text(text,
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.primary)),
         ),
       );
     }
@@ -87,19 +87,18 @@ class CustomButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(100),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 20),
-          ).copyWith(
-            overlayColor: _overlayColor,
-          ),
-          child: isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(text, style: const TextStyle(color: Colors.white)),
+          ).copyWith(overlayColor: _overlayColor),
+          child:
+              isLoading
+                  ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                  : Text(text, style: const TextStyle(color: Colors.white)),
         ),
       ),
     );
