@@ -4,6 +4,7 @@ import 'package:sirkel/screens/auth/login_screen.dart';
 import 'package:sirkel/screens/auth/register_screen.dart';
 import 'package:sirkel/screens/home_screen.dart';
 import 'package:sirkel/utils/constants.dart';
+import 'package:sirkel/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,31 +27,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Sistem Informasi Reminder Kelas & E-Learning',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1a73e8),
-          brightness: Brightness.light,
-        ).copyWith(primary: const Color(0xFF1a73e8)),
-        useMaterial3: true,
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          backgroundColor: const Color(0xFF1a73e8),
-          foregroundColor: Colors.white,
-          elevation: 6,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(100),
-          ),
-          sizeConstraints: const BoxConstraints.tightFor(width: 56, height: 56),
-        ),
-        cardTheme: CardTheme(
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.5),
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias,
-        ),
-      ),
+      theme: AppTheme.light,
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),

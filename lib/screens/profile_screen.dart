@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sirkel/main.dart';
+import 'package:sirkel/theme/app_theme.dart';
 import 'package:sirkel/widgets/custom_button.dart';
 import 'package:sirkel/widgets/custom_text_field.dart';
 
@@ -32,12 +33,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       if (_user?.id == null) return;
 
-      final userData = await supabase
-          .from('profiles')
-          .select()
-          .eq('id', _user!.id)
-          .single();
-      
+      final userData =
+          await supabase.from('profiles').select().eq('id', _user!.id).single();
+
       setState(() {
         _nameController.text = userData['full_name'] ?? '';
       });
@@ -55,9 +53,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       if (_user?.id == null) return;
 
-      await supabase.from('profiles').update({
-        'full_name': _nameController.text.trim(),
-      }).eq('id', _user!.id);
+      await supabase
+          .from('profiles')
+          .update({'full_name': _nameController.text.trim()})
+          .eq('id', _user!.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -79,9 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profil'),
-      ),
+      appBar: AppBar(title: const Text('Profil')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -90,10 +87,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Center(
               child: CircleAvatar(
                 radius: 50,
-                backgroundColor: Theme.of(context).colorScheme.primary,
+                backgroundColor: AppColors.primary,
                 child: Text(
-                  _nameController.text.isNotEmpty 
-                      ? _nameController.text[0].toUpperCase() 
+                  _nameController.text.isNotEmpty
+                      ? _nameController.text[0].toUpperCase()
                       : 'M',
                   style: const TextStyle(fontSize: 40.0, color: Colors.white),
                 ),
