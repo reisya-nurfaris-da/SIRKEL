@@ -76,16 +76,17 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
             _selectedFileBytes = null;
           }
           final ext = path.extension(_selectedFileName!).toLowerCase();
-          _materialType = ['.jpg', '.jpeg', '.png', '.gif'].contains(ext)
-              ? 'image'
-              : 'file';
+          _materialType =
+              ['.jpg', '.jpeg', '.png', '.gif'].contains(ext)
+                  ? 'image'
+                  : 'file';
         });
       }
     } catch (e) {
       debugPrint('Error picking file: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error memilih file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error memilih file: $e')));
     }
   }
 
@@ -107,8 +108,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               .from('materials')
               .uploadBinary(uploadPath, _selectedFileBytes!);
           if (resp.isNotEmpty) {
-            fileUrl =
-                supabase.storage.from('materials').getPublicUrl(uploadPath);
+            fileUrl = supabase.storage
+                .from('materials')
+                .getPublicUrl(uploadPath);
             fileType = _materialType;
           }
         } else if (!kIsWeb && _selectedFilePath != null) {
@@ -118,8 +120,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               .from('materials')
               .uploadBinary(uploadPath, bytes);
           if (resp.isNotEmpty) {
-            fileUrl =
-                supabase.storage.from('materials').getPublicUrl(uploadPath);
+            fileUrl = supabase.storage
+                .from('materials')
+                .getPublicUrl(uploadPath);
             fileType = _materialType;
           }
         }
@@ -138,15 +141,16 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
         createdAt: DateTime.now(),
       );
 
-      final response = await supabase.from('materials').insert({
-        'user_id': newMat.userId,
-        'title': newMat.title,
-        'description': newMat.description,
-        'content': newMat.content,
-        'file_url': newMat.fileUrl,
-        'file_type': newMat.fileType,
-        'file_name': newMat.fileName,
-      }).select();
+      final response =
+          await supabase.from('materials').insert({
+            'user_id': newMat.userId,
+            'title': newMat.title,
+            'description': newMat.description,
+            'content': newMat.content,
+            'file_url': newMat.fileUrl,
+            'file_type': newMat.fileType,
+            'file_name': newMat.fileName,
+          }).select();
 
       if (response.isNotEmpty) {
         final inserted = MaterialItem.fromJson(response.first);
@@ -162,9 +166,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
       _materialType = 'text';
     } catch (e) {
       debugPrint('Error adding material: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error menambahkan materi: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error menambahkan materi: $e')));
     }
   }
 
@@ -183,6 +187,32 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     }
   }
 
+  Future<void> _confirmDeleteMaterial(MaterialItem material) async {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Hapus Materi'),
+            content: const Text(
+              'Apakah kamu yakin ingin menghapus materi ini?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _deleteMaterial(material);
+                },
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+  }
+
   Future<void> _openFile(String fileUrl) async {
     try {
       final uri = Uri.parse(fileUrl);
@@ -194,9 +224,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error membuka file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error membuka file: $e')));
     }
   }
 
@@ -212,93 +242,101 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          title: const Text('Tambah Materi Pembelajaran'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: _titleController,
-                  hintText: 'Judul',
-                  prefixIcon: Icons.title,
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                          value: 'text',
-                          label: Text('Teks'),
-                          icon: Icon(Icons.text_fields)),
-                      ButtonSegment(
-                          value: 'file',
-                          label: Text('File'),
-                          icon: Icon(Icons.attach_file)),
-                    ],
-                    selected: {_materialType},
-                    onSelectionChanged: (sel) {
-                      setDialogState(() => _materialType = sel.first);
-                    },
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (_materialType == 'text') ...[
-                  CustomTextField(
-                    controller: _descriptionController,
-                    hintText: 'Konten',
-                    prefixIcon: Icons.description,
-                    keyboardType: TextInputType.multiline,
-                  ),
-                ] else ...[
-                  CustomTextField(
-                    controller: _descriptionController,
-                    hintText: 'Deskripsi (opsional)',
-                    prefixIcon: Icons.description,
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: CustomButton(
-                      text: 'Pilih File',
-                      isOutlined: true,
-                      onPressed: () async {
-                        await _pickFile();
-                        if (!context.mounted) return;
-                        setDialogState(() {});
-                      },
+                  title: const Text('Tambah Materi Pembelajaran'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CustomTextField(
+                          controller: _titleController,
+                          hintText: 'Judul',
+                          prefixIcon: Icons.title,
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(
+                                value: 'text',
+                                label: Text('Teks'),
+                                icon: Icon(Icons.text_fields),
+                              ),
+                              ButtonSegment(
+                                value: 'file',
+                                label: Text('File'),
+                                icon: Icon(Icons.attach_file),
+                              ),
+                            ],
+                            selected: {_materialType},
+                            onSelectionChanged: (sel) {
+                              setDialogState(() => _materialType = sel.first);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (_materialType == 'text') ...[
+                          CustomTextField(
+                            controller: _descriptionController,
+                            hintText: 'Konten',
+                            prefixIcon: Icons.description,
+                            keyboardType: TextInputType.multiline,
+                          ),
+                        ] else ...[
+                          CustomTextField(
+                            controller: _descriptionController,
+                            hintText: 'Deskripsi (opsional)',
+                            prefixIcon: Icons.description,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: CustomButton(
+                              text: 'Pilih File',
+                              isOutlined: true,
+                              onPressed: () async {
+                                await _pickFile();
+                                if (!context.mounted) return;
+                                setDialogState(() {});
+                              },
+                            ),
+                          ),
+                          if (_selectedFileName != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'File terpilih: $_selectedFileName',
+                              style: const TextStyle(
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
                     ),
                   ),
-                  if (_selectedFileName != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'File terpilih: $_selectedFileName',
-                      style: const TextStyle(fontStyle: FontStyle.italic),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Batal'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await _addMaterial();
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      child: const Text('Tambah'),
                     ),
                   ],
-                ],
-              ],
-            ),
+                ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await _addMaterial();
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              child: const Text('Tambah'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -312,93 +350,101 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          title: const Text('Edit Materi Pembelajaran'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: _titleController,
-                  hintText: 'Judul',
-                  prefixIcon: Icons.title,
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                          value: 'text',
-                          label: Text('Teks'),
-                          icon: Icon(Icons.text_fields)),
-                      ButtonSegment(
-                          value: 'file',
-                          label: Text('File'),
-                          icon: Icon(Icons.attach_file)),
-                    ],
-                    selected: {_materialType},
-                    onSelectionChanged: (sel) {
-                      setDialogState(() => _materialType = sel.first);
-                    },
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (_materialType == 'text') ...[
-                  CustomTextField(
-                    controller: _descriptionController,
-                    hintText: 'Konten',
-                    prefixIcon: Icons.description,
-                    keyboardType: TextInputType.multiline,
-                  ),
-                ] else ...[
-                  CustomTextField(
-                    controller: _descriptionController,
-                    hintText: 'Deskripsi (opsional)',
-                    prefixIcon: Icons.description,
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: CustomButton(
-                      text: 'Pilih File',
-                      isOutlined: true,
-                      onPressed: () async {
-                        await _pickFile();
-                        if (!context.mounted) return;
-                        setDialogState(() {});
-                      },
+                  title: const Text('Edit Materi Pembelajaran'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CustomTextField(
+                          controller: _titleController,
+                          hintText: 'Judul',
+                          prefixIcon: Icons.title,
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(
+                                value: 'text',
+                                label: Text('Teks'),
+                                icon: Icon(Icons.text_fields),
+                              ),
+                              ButtonSegment(
+                                value: 'file',
+                                label: Text('File'),
+                                icon: Icon(Icons.attach_file),
+                              ),
+                            ],
+                            selected: {_materialType},
+                            onSelectionChanged: (sel) {
+                              setDialogState(() => _materialType = sel.first);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (_materialType == 'text') ...[
+                          CustomTextField(
+                            controller: _descriptionController,
+                            hintText: 'Konten',
+                            prefixIcon: Icons.description,
+                            keyboardType: TextInputType.multiline,
+                          ),
+                        ] else ...[
+                          CustomTextField(
+                            controller: _descriptionController,
+                            hintText: 'Deskripsi (opsional)',
+                            prefixIcon: Icons.description,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: CustomButton(
+                              text: 'Pilih File',
+                              isOutlined: true,
+                              onPressed: () async {
+                                await _pickFile();
+                                if (!context.mounted) return;
+                                setDialogState(() {});
+                              },
+                            ),
+                          ),
+                          if (_selectedFileName != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'File terpilih: $_selectedFileName',
+                              style: const TextStyle(
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ],
                     ),
                   ),
-                  if (_selectedFileName != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'File terpilih: $_selectedFileName',
-                      style: const TextStyle(fontStyle: FontStyle.italic),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Batal'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await _updateMaterial(m);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      child: const Text('Simpan'),
                     ),
                   ],
-                ],
-              ],
-            ),
+                ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await _updateMaterial(m);
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -420,8 +466,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               .from('materials')
               .uploadBinary(uploadPath, _selectedFileBytes!);
           if (resp.isNotEmpty) {
-            fileUrl =
-                supabase.storage.from('materials').getPublicUrl(uploadPath);
+            fileUrl = supabase.storage
+                .from('materials')
+                .getPublicUrl(uploadPath);
             fileType = _materialType;
           }
         } else if (!kIsWeb && _selectedFilePath != null) {
@@ -430,8 +477,9 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               .from('materials')
               .uploadBinary(uploadPath, bytes);
           if (resp.isNotEmpty) {
-            fileUrl =
-                supabase.storage.from('materials').getPublicUrl(uploadPath);
+            fileUrl = supabase.storage
+                .from('materials')
+                .getPublicUrl(uploadPath);
             fileType = _materialType;
           }
         }
@@ -447,12 +495,13 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
         'file_name': _selectedFileName,
       };
 
-      final resp = await supabase
-          .from('materials')
-          .update(updated)
-          .eq('id', m.id)
-          .select()
-          .single();
+      final resp =
+          await supabase
+              .from('materials')
+              .update(updated)
+              .eq('id', m.id)
+              .select()
+              .single();
 
       setState(() {
         final i = _materials.indexWhere((item) => item.id == m.id);
@@ -463,119 +512,121 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
       _selectedFileBytes = null;
     } catch (e) {
       debugPrint('Error updating material: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error memperbarui materi: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error memperbarui materi: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _materials.isEmpty
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _materials.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.book,
-                        size: 80,
-                        color: Colors.grey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.book, size: 80, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Belum ada materi pembelajaran',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Belum ada materi pembelajaran',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tambahkan materi pertama Anda',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 24),
-                      CustomButton(
-                        text: 'Tambah Materi',
-                        onPressed: _showAddMaterialDialog,
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _materials.length,
-                  padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) {
-                    final m = _materials[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text(m.title,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            subtitle: m.description.isNotEmpty
-                                ? Text(m.description)
-                                : null,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () => _showEditMaterialDialog(m),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () => _deleteMaterial(m),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (m.fileType == 'image' && m.fileUrl != null)
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: GestureDetector(
-                                onTap: () => _openFile(m.fileUrl!),
-                                child: Image.network(
-                                  m.fileUrl!,
-                                  height: 200,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (ctx, e, st) => Container(
-                                    height: 200,
-                                    width: double.infinity,
-                                    color: Colors.grey[300],
-                                    child: const Center(
-                                      child: Text('Tidak dapat memuat gambar'),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (m.fileType == 'file' && m.fileUrl != null)
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: CustomButton(
-                                text: 'Buka ${m.fileName ?? 'File'}',
-                                onPressed: () => _openFile(m.fileUrl!),
-                                isOutlined: true,
-                              ),
-                            )
-                          else if (m.content != null && m.fileType != null)
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Text(m.content!),
-                            )
-                        ],
-                      ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tambahkan materi pertama Anda',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+                    CustomButton(
+                      text: 'Tambah Materi',
+                      onPressed: _showAddMaterialDialog,
+                    ),
+                  ],
                 ),
+              )
+              : ListView.builder(
+                itemCount: _materials.length,
+                padding: const EdgeInsets.all(16),
+                itemBuilder: (context, index) {
+                  final m = _materials[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          title: Text(
+                            m.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle:
+                              m.description.isNotEmpty
+                                  ? Text(m.description)
+                                  : null,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit),
+                                onPressed: () => _showEditMaterialDialog(m),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                onPressed: () => _confirmDeleteMaterial(m),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (m.fileType == 'image' && m.fileUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: GestureDetector(
+                              onTap: () => _openFile(m.fileUrl!),
+                              child: Image.network(
+                                m.fileUrl!,
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (ctx, e, st) => Container(
+                                      height: 200,
+                                      width: double.infinity,
+                                      color: Colors.grey[300],
+                                      child: const Center(
+                                        child: Text(
+                                          'Tidak dapat memuat gambar',
+                                        ),
+                                      ),
+                                    ),
+                              ),
+                            ),
+                          )
+                        else if (m.fileType == 'file' && m.fileUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: CustomButton(
+                              text: 'Buka ${m.fileName ?? 'File'}',
+                              onPressed: () => _openFile(m.fileUrl!),
+                              isOutlined: true,
+                            ),
+                          )
+                        else if (m.content != null && m.fileType != null)
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Text(m.content!),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddMaterialDialog,
         child: const Icon(Icons.add),

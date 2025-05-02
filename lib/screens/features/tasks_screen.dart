@@ -19,6 +19,10 @@ class _TasksScreenState extends State<TasksScreen> {
   DateTime _deadline = DateTime.now().add(const Duration(days: 1));
   List<Task> _tasks = [];
   bool _isLoading = false;
+  bool _isTitleValid(String title) {
+    final regex = RegExp(r'^[a-zA-Z0-9\s]+$');
+    return regex.hasMatch(title);
+  }
 
   @override
   void initState() {
@@ -58,7 +62,11 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Future<void> _addTask() async {
-    if (_titleController.text.trim().isEmpty) {
+    final trimmedTitle = _titleController.text.trim();
+    if (trimmedTitle.isEmpty || !_isTitleValid(trimmedTitle)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Judul hanya boleh huruf dan angka')),
+      );
       return;
     }
 
@@ -72,13 +80,14 @@ class _TasksScreenState extends State<TasksScreen> {
         isCompleted: false,
       );
 
-      final response = await supabase.from('tasks').insert({
-        'user_id': newTask.userId,
-        'title': newTask.title,
-        'description': newTask.description,
-        'deadline': newTask.deadline.toIso8601String(),
-        'is_completed': newTask.isCompleted,
-      }).select();
+      final response =
+          await supabase.from('tasks').insert({
+            'user_id': newTask.userId,
+            'title': newTask.title,
+            'description': newTask.description,
+            'deadline': newTask.deadline.toIso8601String(),
+            'is_completed': newTask.isCompleted,
+          }).select();
 
       if (response.isNotEmpty) {
         final insertedTask = Task.fromJson(response.first);
@@ -95,17 +104,18 @@ class _TasksScreenState extends State<TasksScreen> {
       }
     } catch (e) {
       debugPrint('Error adding task: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error menambahkan tugas: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error menambahkan tugas: $e')));
     }
   }
 
   Future<void> _toggleTaskCompletion(Task task) async {
     try {
-      await supabase.from('tasks').update({
-        'is_completed': !task.isCompleted,
-      }).eq('id', task.id);
+      await supabase
+          .from('tasks')
+          .update({'is_completed': !task.isCompleted})
+          .eq('id', task.id);
 
       setState(() {
         final index = _tasks.indexWhere((t) => t.id == task.id);
@@ -131,9 +141,36 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
+  Future<void> _confirmDeleteTask(String taskId) async {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Hapus Tugas'),
+            content: const Text('Apakah kamu yakin ingin menghapus tugas ini?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _deleteTask(taskId);
+                },
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+  }
+
   String _getRemainingDays(DateTime deadline) {
     final now = DateTime.now();
-    final difference = deadline.difference(now).inDays;
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDate = DateTime(deadline.year, deadline.month, deadline.day);
+
+    final difference = dueDate.difference(today).inDays;
 
     if (difference < 0) {
       return 'Terlambat';
@@ -149,63 +186,63 @@ class _TasksScreenState extends State<TasksScreen> {
   void _showAddTaskDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(
-          horizontal: 24.0,
-          vertical: 24.0,
-        ),
-        title: const Text('Tambah Tugas Baru'),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: _titleController,
-                  hintText: 'Judul Tugas',
-                  prefixIcon: Icons.title,
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: _descriptionController,
-                  hintText: 'Deskripsi',
-                  prefixIcon: Icons.description,
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  title: const Text('Tenggat Waktu'),
-                  subtitle: Text(
-                    DateFormat(Constants.dateFormat).format(_deadline),
-                  ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final pickedDate = await showDatePicker(
-                      context: context,
-                      initialDate: _deadline,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (pickedDate != null) {
-                      setState(() => _deadline = pickedDate);
-                    }
-                  },
-                ),
-              ],
+      builder:
+          (context) => AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 24.0,
             ),
+            title: const Text('Tambah Tugas Baru'),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomTextField(
+                      controller: _titleController,
+                      hintText: 'Judul Tugas',
+                      prefixIcon: Icons.title,
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      controller: _descriptionController,
+                      hintText: 'Deskripsi',
+                      prefixIcon: Icons.description,
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: const Text('Tenggat Waktu'),
+                      subtitle: Text(
+                        DateFormat(Constants.dateFormat).format(_deadline),
+                      ),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _deadline,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (pickedDate != null) {
+                          setState(() => _deadline = pickedDate);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Batal'),
+              ),
+              TextButton(onPressed: _addTask, child: const Text('Tambah')),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Batal'),
-          ),
-          TextButton(
-            onPressed: _addTask,
-            child: const Text('Tambah'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -216,76 +253,86 @@ class _TasksScreenState extends State<TasksScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Tugas'),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.8,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: _titleController,
-                  hintText: 'Judul Tugas',
-                  prefixIcon: Icons.title,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Tugas'),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomTextField(
+                      controller: _titleController,
+                      hintText: 'Judul Tugas',
+                      prefixIcon: Icons.title,
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      controller: _descriptionController,
+                      hintText: 'Deskripsi',
+                      prefixIcon: Icons.description,
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      title: const Text('Tenggat Waktu'),
+                      subtitle: Text(
+                        DateFormat(Constants.dateFormat).format(_deadline),
+                      ),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: _deadline,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (pickedDate != null) {
+                          setState(() => _deadline = pickedDate);
+                        }
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: _descriptionController,
-                  hintText: 'Deskripsi',
-                  prefixIcon: Icons.description,
-                ),
-                const SizedBox(height: 16),
-                ListTile(
-                  title: const Text('Tenggat Waktu'),
-                  subtitle: Text(
-                    DateFormat(Constants.dateFormat).format(_deadline),
-                  ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final pickedDate = await showDatePicker(
-                      context: context,
-                      initialDate: _deadline,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (pickedDate != null) {
-                      setState(() => _deadline = pickedDate);
-                    }
-                  },
-                ),
-              ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await _updateTask(task);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Simpan'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Batal'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await _updateTask(task);
-              Navigator.of(context).pop();
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
     );
   }
 
   Future<void> _updateTask(Task task) async {
-    if (_titleController.text.trim().isEmpty) {
+    final trimmedTitle = _titleController.text.trim();
+    if (trimmedTitle.isEmpty || !_isTitleValid(trimmedTitle)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Judul hanya boleh huruf dan angka')),
+      );
       return;
     }
 
     try {
-      await supabase.from('tasks').update({
-        'title': _titleController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'deadline': _deadline.toIso8601String(),
-      }).eq('id', task.id);
+      await supabase
+          .from('tasks')
+          .update({
+            'title': _titleController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'deadline': _deadline.toIso8601String(),
+          })
+          .eq('id', task.id);
 
       setState(() {
         final index = _tasks.indexWhere((t) => t.id == task.id);
@@ -302,139 +349,141 @@ class _TasksScreenState extends State<TasksScreen> {
       _descriptionController.clear();
     } catch (e) {
       debugPrint('Error updating task: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error mengubah tugas: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error mengubah tugas: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _tasks.isEmpty
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _tasks.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.task_alt,
-                        size: 80,
-                        color: Colors.grey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.task_alt, size: 80, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Belum ada tugas',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Belum ada tugas',
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tambahkan tugas pertama Anda',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+                    CustomButton(
+                      text: 'Tambah Tugas',
+                      onPressed: _showAddTaskDialog,
+                    ),
+                  ],
+                ),
+              )
+              : ListView.builder(
+                itemCount: _tasks.length,
+                padding: const EdgeInsets.all(16),
+                itemBuilder: (context, index) {
+                  final task = _tasks[index];
+                  final remainingDays = _getRemainingDays(task.deadline);
+                  final isOverdue = remainingDays == 'Terlambat';
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(16),
+                      title: Text(
+                        task.title,
                         style: TextStyle(
-                          fontSize: 18,
+                          decoration:
+                              task.isCompleted
+                                  ? TextDecoration.lineThrough
+                                  : null,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tambahkan tugas pertama Anda',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 24),
-                      CustomButton(
-                        text: 'Tambah Tugas',
-                        onPressed: _showAddTaskDialog,
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _tasks.length,
-                  padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) {
-                    final task = _tasks[index];
-                    final remainingDays = _getRemainingDays(task.deadline);
-                    final isOverdue = remainingDays == 'Terlambat';
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        title: Text(
-                          task.title,
-                          style: TextStyle(
-                            decoration: task.isCompleted
-                                ? TextDecoration.lineThrough
-                                : null,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (task.description.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(task.description),
-                            ],
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (task.description.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.calendar_today,
-                                  size: 16,
-                                  color: isOverdue && !task.isCompleted
-                                      ? Colors.red
-                                      : Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  DateFormat(Constants.dateFormat)
-                                      .format(task.deadline),
-                                  style: TextStyle(
-                                    color: isOverdue && !task.isCompleted
+                            Text(task.description),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                                color:
+                                    isOverdue && !task.isCompleted
                                         ? Colors.red
                                         : Colors.grey,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                DateFormat(
+                                  Constants.dateFormat,
+                                ).format(task.deadline),
+                                style: TextStyle(
+                                  color:
+                                      isOverdue && !task.isCompleted
+                                          ? Colors.red
+                                          : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Chip(
+                                label: Text(
+                                  remainingDays,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        isOverdue && !task.isCompleted
+                                            ? Colors.white
+                                            : null,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Chip(
-                                  label: Text(
-                                    remainingDays,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isOverdue && !task.isCompleted
-                                          ? Colors.white
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      trailing: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 0,
+                          maxWidth: 120,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: task.isCompleted,
+                              onChanged: (_) => _toggleTaskCompletion(task),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () => _showEditTaskDialog(task),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () => _confirmDeleteTask(task.id),
                             ),
                           ],
                         ),
-                        trailing: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minWidth: 0,
-                            maxWidth: 120,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Checkbox(
-                                value: task.isCompleted,
-                                onChanged: (_) => _toggleTaskCompletion(task),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () => _showEditTaskDialog(task),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _deleteTask(task.id),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddTaskDialog,
         child: const Icon(Icons.add),

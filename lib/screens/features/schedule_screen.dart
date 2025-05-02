@@ -135,6 +135,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  Future<void> _confirmDeleteSchedule(String scheduleId) async {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Hapus Jadwal'),
+            content: const Text(
+              'Apakah kamu yakin ingin menghapus jadwal ini?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _deleteSchedule(scheduleId);
+                },
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+  }
+
   List<Schedule> _getSchedulesForDay(DateTime day) {
     return _schedules.where((schedule) {
       if (schedule.isRecurring && schedule.recurrenceType == 'weekly') {
@@ -617,8 +643,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.delete),
                                           onPressed:
-                                              () =>
-                                                  _deleteSchedule(schedule.id),
+                                              () => _confirmDeleteSchedule(
+                                                schedule.id,
+                                              ),
                                         ),
                                       ],
                                     ),

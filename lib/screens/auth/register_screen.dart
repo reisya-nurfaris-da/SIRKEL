@@ -26,6 +26,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _signUp() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (name.split(' ').length < 2) {
+      setState(() {
+        _errorMessage = 'Nama lengkap harus terdiri dari minimal 2 kata';
+      });
+      return;
+    }
+
+    if (RegExp(r'\d').hasMatch(name)) {
+      setState(() {
+        _errorMessage = 'Nama tidak boleh mengandung angka';
+      });
+      return;
+    }
+
+    if (!email.endsWith('@gmail.com')) {
+      setState(() {
+        _errorMessage = 'Email harus diakhiri dengan @gmail.com';
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() {
+        _errorMessage = 'Password harus minimal 6 karakter';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -47,16 +79,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
             'full_name': _nameController.text.trim(),
             'email': _emailController.text.trim(),
           });
-          
+
           await Future.delayed(const Duration(milliseconds: 100));
           if (!mounted) return;
-          
+
           Navigator.of(context).pushReplacementNamed('/home');
         } catch (profileError) {
           debugPrint('Error creating profile: $profileError');
           await Future.delayed(const Duration(milliseconds: 100));
           if (!mounted) return;
-          
+
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
@@ -81,9 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Buat Akun Baru'),
-      ),
+      appBar: AppBar(title: const Text('Buat Akun Baru')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
