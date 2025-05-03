@@ -26,9 +26,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   DateTime _selectedDay = DateTime.now();
   DateTime _focusedDay = DateTime.now();
   TimeOfDay _startTime = TimeOfDay.now();
-  TimeOfDay _endTime = TimeOfDay.now().replacing(
-    hour: TimeOfDay.now().hour + 1,
-  );
+  TimeOfDay _endTime = TimeOfDay.now();
 
   List<Schedule> _schedules = [];
   bool _isLoading = false;
@@ -38,6 +36,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
+    _setInitialTimes();
     _loadSchedules();
   }
 
@@ -47,6 +46,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _locationController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _setInitialTimes() {
+    final now = TimeOfDay.now();
+    _startTime = now;
+    final nextHour = (now.hour + 1) % TimeOfDay.hoursPerDay;
+    _endTime = now.replacing(hour: nextHour);
   }
 
   Future<void> _loadSchedules() async {
@@ -240,8 +246,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _courseController.clear();
     _locationController.clear();
     _notesController.clear();
-    _startTime = TimeOfDay.now();
-    _endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+    _setInitialTimes();
     _isRecurring = false;
 
     showDialog(
