@@ -316,13 +316,18 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Diposting oleh: ${ann.createdBy}',
-                                style: const TextStyle(
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.grey,
+                              Expanded(
+                                child: Text(
+                                  ann.createdBy,
+                                  style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
                                 DateFormat(
                                   Constants.dateFormat,
