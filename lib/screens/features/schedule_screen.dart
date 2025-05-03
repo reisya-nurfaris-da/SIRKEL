@@ -16,6 +16,9 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  Set<String> _selectedScheduleIds = {};
+  bool get _isSelectionMode => _selectedScheduleIds.isNotEmpty;
+
   final _courseController = TextEditingController();
   final _locationController = TextEditingController();
   final _notesController = TextEditingController();
@@ -114,8 +117,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         _locationController.clear();
         _notesController.clear();
         _isRecurring = false;
-
-        Navigator.of(context).pop();
       }
     } catch (e) {
       debugPrint('Error adding schedule: $e');
@@ -131,8 +132,35 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       setState(() {
         _schedules.removeWhere((schedule) => schedule.id == scheduleId);
       });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Jadwal berhasil dihapus')));
     } catch (e) {
       debugPrint('Error deleting schedule: $e');
+    }
+  }
+
+  Future<void> _deleteSelectedSchedules() async {
+    try {
+      final count = _selectedScheduleIds.length;
+
+      await supabase
+          .from('schedules')
+          .delete()
+          .inFilter('id', _selectedScheduleIds.toList());
+
+      setState(() {
+        _schedules.removeWhere(
+          (schedule) => _selectedScheduleIds.contains(schedule.id),
+        );
+        _selectedScheduleIds.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Berhasil menghapus $count jadwal')),
+      );
+    } catch (e) {
+      debugPrint('Error deleting selected schedules: $e');
     }
   }
 
@@ -162,6 +190,36 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  Future<void> _confirmDeleteSelectedSchedules() async {
+    if (_selectedScheduleIds.isEmpty) return;
+
+    final count = _selectedScheduleIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: Text('Hapus $count jadwal?'),
+            content: Text(
+              'Apakah kamu yakin ingin menghapus $count jadwal yang terpilih?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm == true) {
+      await _deleteSelectedSchedules();
+    }
+  }
+
   List<Schedule> _getSchedulesForDay(DateTime day) {
     return _schedules.where((schedule) {
       if (schedule.isRecurring && schedule.recurrenceType == 'weekly') {
@@ -175,142 +233,178 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showAddScheduleDialog() {
-    setState(() {
-      _courseController.clear();
-      _locationController.clear();
-      _notesController.clear();
-      _startTime = TimeOfDay.now();
-      _endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
-      _isRecurring = false;
-      _recurrenceType = 'weekly';
-    });
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+
+    _courseController.clear();
+    _locationController.clear();
+    _notesController.clear();
+    _startTime = TimeOfDay.now();
+    _endTime = TimeOfDay.now().replacing(hour: TimeOfDay.now().hour + 1);
+    _isRecurring = false;
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (context) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (context, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
+                  ),
                   title: const Text('Tambah Jadwal Kuliah'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CustomTextField(
-                          controller: _courseController,
-                          hintText: 'Nama Mata Kuliah',
-                          prefixIcon: Icons.book,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _locationController,
-                          hintText: 'Lokasi',
-                          prefixIcon: Icons.location_on,
-                        ),
-                        const SizedBox(height: 16),
-                        ListTile(
-                          title: const Text('Tanggal'),
-                          subtitle: Text(
-                            DateFormat(
-                              Constants.dateFormat,
-                            ).format(_selectedDay),
-                          ),
-                          trailing: const Icon(Icons.calendar_today),
-                          onTap: () async {
-                            final pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: _selectedDay,
-                              firstDate: DateTime.now().subtract(
-                                const Duration(days: 365),
-                              ),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
-                            );
-
-                            if (pickedDate != null) {
-                              setDialogState(() {
-                                _selectedDay = pickedDate;
-                              });
-                            }
-                          },
-                        ),
-                        Row(
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: ListTile(
-                                title: const Text('Waktu Mulai'),
-                                subtitle: Text(_startTime.format(context)),
-                                trailing: const Icon(Icons.access_time),
-                                onTap: () async {
-                                  final pickedTime = await showTimePicker(
-                                    context: context,
-                                    initialTime: _startTime,
-                                  );
-
-                                  if (pickedTime != null) {
-                                    setDialogState(() {
-                                      _startTime = pickedTime;
-                                      if (_endTime.hour < _startTime.hour ||
-                                          (_endTime.hour == _startTime.hour &&
-                                              _endTime.minute <
-                                                  _startTime.minute)) {
-                                        _endTime = TimeOfDay(
-                                          hour: _startTime.hour + 1,
-                                          minute: _startTime.minute,
-                                        );
-                                      }
-                                    });
-                                  }
-                                },
-                              ),
+                            CustomTextField(
+                              controller: _courseController,
+                              hintText: 'Nama Mata Kuliah',
+                              prefixIcon: Icons.book,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Nama mata kuliah tidak boleh kosong'
+                                          : null,
                             ),
-                            Expanded(
-                              child: ListTile(
-                                title: const Text('Waktu Selesai'),
-                                subtitle: Text(_endTime.format(context)),
-                                trailing: const Icon(Icons.access_time),
-                                onTap: () async {
-                                  final pickedTime = await showTimePicker(
-                                    context: context,
-                                    initialTime: _endTime,
-                                  );
 
-                                  if (pickedTime != null) {
-                                    setDialogState(() {
-                                      _endTime = pickedTime;
-                                    });
-                                  }
-                                },
+                            const SizedBox(height: 16),
+
+                            CustomTextField(
+                              controller: _locationController,
+                              hintText: 'Lokasi (opsional)',
+                              prefixIcon: Icons.location_on,
+                              validator: null,
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            ListTile(
+                              title: const Text('Tanggal'),
+                              subtitle: Text(
+                                DateFormat(
+                                  Constants.dateFormat,
+                                ).format(_selectedDay),
                               ),
+                              trailing: const Icon(Icons.calendar_today),
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: dialogContext,
+                                  initialDate: _selectedDay,
+                                  firstDate: DateTime.now().subtract(
+                                    const Duration(days: 365),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => _selectedDay = picked);
+                                }
+                              },
+                            ),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ListTile(
+                                    title: const Text('Waktu Mulai'),
+                                    subtitle: Text(
+                                      _startTime.format(parentContext),
+                                    ),
+                                    trailing: const Icon(Icons.access_time),
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: dialogContext,
+                                        initialTime: _startTime,
+                                      );
+                                      if (picked != null) {
+                                        setDialogState(() {
+                                          _startTime = picked;
+                                          if (_endTime.hour < picked.hour ||
+                                              (_endTime.hour == picked.hour &&
+                                                  _endTime.minute <
+                                                      picked.minute)) {
+                                            _endTime = TimeOfDay(
+                                              hour: picked.hour + 1,
+                                              minute: picked.minute,
+                                            );
+                                          }
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListTile(
+                                    title: const Text('Waktu Selesai'),
+                                    subtitle: Text(
+                                      _endTime.format(parentContext),
+                                    ),
+                                    trailing: const Icon(Icons.access_time),
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: dialogContext,
+                                        initialTime: _endTime,
+                                      );
+                                      if (picked != null) {
+                                        setDialogState(() => _endTime = picked);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            SwitchListTile(
+                              title: const Text('Jadwal Berulang (Mingguan)'),
+                              value: _isRecurring,
+                              onChanged:
+                                  (v) => setDialogState(() => _isRecurring = v),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            CustomTextField(
+                              controller: _notesController,
+                              hintText: 'Catatan (opsional)',
+                              prefixIcon: Icons.note,
+                              validator: null,
                             ),
                           ],
                         ),
-                        SwitchListTile(
-                          title: const Text('Jadwal Berulang'),
-                          value: _isRecurring,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              _isRecurring = value;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _notesController,
-                          hintText: 'Catatan (opsional)',
-                          prefixIcon: Icons.note,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
-                      onPressed: _addSchedule,
+                      onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+
+                        Navigator.of(dialogContext).pop();
+                        await _addSchedule();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Jadwal berhasil ditambahkan'),
+                          ),
+                        );
+                      },
                       child: const Text('Tambah'),
                     ),
                   ],
@@ -320,6 +414,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showEditScheduleDialog(Schedule s) {
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+
     _courseController.text = s.course;
     _locationController.text = s.location;
     _notesController.text = s.notes;
@@ -328,123 +426,158 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _startTime = s.startTime;
     _endTime = s.endTime;
     _isRecurring = s.isRecurring;
-    _recurrenceType = s.recurrenceType ?? 'weekly';
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (ctx) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (ctx, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 24,
+                  ),
                   title: const Text('Edit Jadwal Kuliah'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CustomTextField(
-                          controller: _courseController,
-                          hintText: 'Nama Mata Kuliah',
-                          prefixIcon: Icons.book,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _locationController,
-                          hintText: 'Lokasi',
-                          prefixIcon: Icons.location_on,
-                        ),
-                        const SizedBox(height: 16),
-                        ListTile(
-                          title: const Text('Tanggal'),
-                          subtitle: Text(
-                            DateFormat(
-                              Constants.dateFormat,
-                            ).format(_selectedDay),
-                          ),
-                          trailing: const Icon(Icons.calendar_today),
-                          onTap: () async {
-                            final p = await showDatePicker(
-                              context: ctx,
-                              initialDate: _selectedDay,
-                              firstDate: DateTime.now().subtract(
-                                const Duration(days: 365),
-                              ),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
-                            );
-                            if (p != null)
-                              setDialogState(() => _selectedDay = p);
-                          },
-                        ),
-                        Row(
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: ListTile(
-                                title: const Text('Waktu Mulai'),
-                                subtitle: Text(_startTime.format(ctx)),
-                                trailing: const Icon(Icons.access_time),
-                                onTap: () async {
-                                  final p = await showTimePicker(
-                                    context: ctx,
-                                    initialTime: _startTime,
-                                  );
-                                  if (p != null) {
-                                    setDialogState(() {
-                                      _startTime = p;
-                                      if (_endTime.hour < p.hour ||
-                                          (_endTime.hour == p.hour &&
-                                              _endTime.minute < p.minute)) {
-                                        _endTime = TimeOfDay(
-                                          hour: p.hour + 1,
-                                          minute: p.minute,
+                            CustomTextField(
+                              controller: _courseController,
+                              hintText: 'Nama Mata Kuliah',
+                              prefixIcon: Icons.book,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Nama mata kuliah tidak boleh kosong'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            CustomTextField(
+                              controller: _locationController,
+                              hintText: 'Lokasi (opsional)',
+                              prefixIcon: Icons.location_on,
+                              validator: null,
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            ListTile(
+                              title: const Text('Tanggal'),
+                              subtitle: Text(
+                                DateFormat(
+                                  Constants.dateFormat,
+                                ).format(_selectedDay),
+                              ),
+                              trailing: const Icon(Icons.calendar_today),
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: dialogContext,
+                                  initialDate: _selectedDay,
+                                  firstDate: DateTime.now().subtract(
+                                    const Duration(days: 365),
+                                  ),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => _selectedDay = picked);
+                                }
+                              },
+                            ),
+
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ListTile(
+                                    title: const Text('Waktu Mulai'),
+                                    subtitle: Text(
+                                      _startTime.format(parentContext),
+                                    ),
+                                    trailing: const Icon(Icons.access_time),
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: dialogContext,
+                                        initialTime: _startTime,
+                                      );
+                                      if (picked != null) {
+                                        setDialogState(
+                                          () => _startTime = picked,
                                         );
                                       }
-                                    });
-                                  }
-                                },
-                              ),
+                                    },
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListTile(
+                                    title: const Text('Waktu Selesai'),
+                                    subtitle: Text(
+                                      _endTime.format(parentContext),
+                                    ),
+                                    trailing: const Icon(Icons.access_time),
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: dialogContext,
+                                        initialTime: _endTime,
+                                      );
+                                      if (picked != null) {
+                                        setDialogState(() => _endTime = picked);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
-                            Expanded(
-                              child: ListTile(
-                                title: const Text('Waktu Selesai'),
-                                subtitle: Text(_endTime.format(ctx)),
-                                trailing: const Icon(Icons.access_time),
-                                onTap: () async {
-                                  final p = await showTimePicker(
-                                    context: ctx,
-                                    initialTime: _endTime,
-                                  );
-                                  if (p != null)
-                                    setDialogState(() => _endTime = p);
-                                },
-                              ),
+
+                            SwitchListTile(
+                              title: const Text('Jadwal Berulang (Mingguan)'),
+                              value: _isRecurring,
+                              onChanged:
+                                  (v) => setDialogState(() => _isRecurring = v),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            CustomTextField(
+                              controller: _notesController,
+                              hintText: 'Catatan (opsional)',
+                              prefixIcon: Icons.note,
+                              validator: null,
                             ),
                           ],
                         ),
-                        SwitchListTile(
-                          title: const Text('Jadwal Berulang'),
-                          value: _isRecurring,
-                          onChanged:
-                              (v) => setDialogState(() => _isRecurring = v),
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _notesController,
-                          hintText: 'Catatan (opsional)',
-                          prefixIcon: Icons.note,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
                       onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+
+                        Navigator.of(dialogContext).pop();
                         await _updateSchedule(s);
-                        if (ctx.mounted) Navigator.of(ctx).pop();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Jadwal berhasil diperbarui'),
+                          ),
+                        );
                       },
                       child: const Text('Simpan'),
                     ),
@@ -496,6 +629,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final todaysSchedules = _getSchedulesForDay(_selectedDay);
+
     return Scaffold(
       body:
           _isLoading
@@ -513,6 +648,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       setState(() {
                         _selectedDay = selectedDay;
                         _focusedDay = focusedDay;
+
+                        _selectedScheduleIds.clear();
                       });
                     },
                     eventLoader: _getSchedulesForDay,
@@ -527,7 +664,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const Divider(),
                   Expanded(
                     child:
-                        _getSchedulesForDay(_selectedDay).isEmpty
+                        todaysSchedules.isEmpty
                             ? Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -548,16 +685,56 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               ),
                             )
                             : ListView.builder(
-                              itemCount:
-                                  _getSchedulesForDay(_selectedDay).length,
-                              padding: const EdgeInsets.all(16),
+                              itemCount: todaysSchedules.length,
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                16,
+                                16,
+                                80,
+                              ),
                               itemBuilder: (context, index) {
-                                final schedule =
-                                    _getSchedulesForDay(_selectedDay)[index];
-
+                                final schedule = todaysSchedules[index];
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 16),
                                   child: ListTile(
+                                    onTap: () {
+                                      setState(() {
+                                        if (_isSelectionMode) {
+                                          if (_selectedScheduleIds.contains(
+                                            schedule.id,
+                                          )) {
+                                            _selectedScheduleIds.remove(
+                                              schedule.id,
+                                            );
+                                          } else {
+                                            _selectedScheduleIds.add(
+                                              schedule.id,
+                                            );
+                                          }
+                                        } else {
+                                          _showEditScheduleDialog(schedule);
+                                        }
+                                      });
+                                    },
+                                    onLongPress: () {
+                                      setState(() {
+                                        if (_selectedScheduleIds.contains(
+                                          schedule.id,
+                                        )) {
+                                          _selectedScheduleIds.remove(
+                                            schedule.id,
+                                          );
+                                        } else {
+                                          _selectedScheduleIds.add(schedule.id);
+                                        }
+                                      });
+                                    },
+                                    selected: _selectedScheduleIds.contains(
+                                      schedule.id,
+                                    ),
+                                    selectedTileColor: AppColors.primary
+                                        .withValues(alpha: 0.1),
+
                                     title: Text(
                                       schedule.course,
                                       style: const TextStyle(
@@ -614,7 +791,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  'Berulang ${schedule.recurrenceType == 'weekly' ? 'mingguan' : ''}',
+                                                  'Berulang mingguan',
                                                   style: const TextStyle(
                                                     fontStyle: FontStyle.italic,
                                                   ),
@@ -631,25 +808,32 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                           ),
                                       ],
                                     ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          onPressed:
-                                              () => _showEditScheduleDialog(
-                                                schedule,
-                                              ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete),
-                                          onPressed:
-                                              () => _confirmDeleteSchedule(
-                                                schedule.id,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
+                                    trailing:
+                                        !_isSelectionMode
+                                            ? Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.edit),
+                                                  onPressed:
+                                                      () =>
+                                                          _showEditScheduleDialog(
+                                                            schedule,
+                                                          ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                  ),
+                                                  onPressed:
+                                                      () =>
+                                                          _confirmDeleteSchedule(
+                                                            schedule.id,
+                                                          ),
+                                                ),
+                                              ],
+                                            )
+                                            : null,
                                   ),
                                 );
                               },
@@ -658,8 +842,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ],
               ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddScheduleDialog,
-        child: const Icon(Icons.add),
+        onPressed:
+            _isSelectionMode
+                ? _confirmDeleteSelectedSchedules
+                : _showAddScheduleDialog,
+        backgroundColor: _isSelectionMode ? Colors.red : null,
+        child: Icon(_isSelectionMode ? Icons.delete : Icons.add),
       ),
     );
   }

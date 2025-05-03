@@ -22,6 +22,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
   final _descriptionController = TextEditingController();
   List<MaterialItem> _materials = [];
   bool _isLoading = false;
+  Set<String> _selectedMaterialIds = {};
+  bool get _isSelectionMode => _selectedMaterialIds.isNotEmpty;
 
   Uint8List? _selectedFileBytes;
   String? _selectedFilePath;
@@ -66,20 +68,47 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
         allowMultiple: false,
       );
       if (result != null && result.files.isNotEmpty) {
+        final pickedFile = result.files.first;
+        final fileName = pickedFile.name;
+        final ext = path.extension(fileName).toLowerCase().replaceAll('.', '');
+
+        final allowedExtensions = [
+          'ppt',
+          'pptx',
+          'doc',
+          'docx',
+          'txt',
+          'pdf',
+          'png',
+          'jpg',
+          'jpeg',
+          'webm',
+          'avif',
+          'mp4',
+        ];
+
+        if (!allowedExtensions.contains(ext)) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('File .$ext tidak didukung!')));
+          return;
+        }
+
         setState(() {
-          _selectedFileName = result.files.first.name;
+          _selectedFileName = fileName;
           if (kIsWeb) {
-            _selectedFileBytes = result.files.first.bytes;
+            _selectedFileBytes = pickedFile.bytes;
             _selectedFilePath = null;
           } else {
-            _selectedFilePath = result.files.first.path;
+            _selectedFilePath = pickedFile.path;
             _selectedFileBytes = null;
           }
-          final ext = path.extension(_selectedFileName!).toLowerCase();
-          _materialType =
-              ['.jpg', '.jpeg', '.png', '.gif'].contains(ext)
-                  ? 'image'
-                  : 'file';
+
+          if (['jpg', 'jpeg', 'png'].contains(ext)) {
+            _materialType = 'image';
+          } else {
+            _materialType = 'file';
+          }
         });
       }
     } catch (e) {
@@ -182,8 +211,30 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
       setState(() {
         _materials.removeWhere((m) => m.id == material.id);
       });
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Materi berhasil dihapus')));
     } catch (e) {
       debugPrint('Error deleting material: $e');
+    }
+  }
+
+  Future<void> _deleteSelectedMaterial() async {
+    try {
+      await supabase
+          .from('materials')
+          .delete()
+          .inFilter('id', _selectedMaterialIds.toList());
+
+      setState(() {
+        _materials.removeWhere(
+          (contact) => _selectedMaterialIds.contains(contact.id),
+        );
+        _selectedMaterialIds.clear();
+      });
+    } catch (e) {
+      debugPrint('Error deleting selected contacts: $e');
     }
   }
 
@@ -213,6 +264,39 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     );
   }
 
+  Future<void> _confirmDeleteSelectedMaterials() async {
+    if (_selectedMaterialIds.isEmpty) return;
+
+    final count = _selectedMaterialIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: Text('Hapus $count materi?'),
+            content: Text(
+              'Apakah kamu yakin ingin menghapus $count materi yang terpilih?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm == true) {
+      await _deleteSelectedMaterial();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Berhasil menghapus $count materi')),
+      );
+    }
+  }
+
   Future<void> _openFile(String fileUrl) async {
     try {
       final uri = Uri.parse(fileUrl);
@@ -231,106 +315,232 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
   }
 
   void _showAddMaterialDialog() {
-    setState(() {
-      _titleController.clear();
-      _descriptionController.clear();
-      _selectedFilePath = null;
-      _selectedFileBytes = null;
-      _selectedFileName = null;
-      _materialType = 'text';
-    });
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+    String? _fileErrorMessage;
+
+    _titleController.clear();
+    _descriptionController.clear();
+    _selectedFilePath = null;
+    _selectedFileBytes = null;
+    _selectedFileName = null;
+    _materialType = 'text';
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (context) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (context, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
                   insetPadding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 24,
                   ),
                   title: const Text('Tambah Materi Pembelajaran'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CustomTextField(
-                          controller: _titleController,
-                          hintText: 'Judul',
-                          prefixIcon: Icons.title,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(
-                                value: 'text',
-                                label: Text('Teks'),
-                                icon: Icon(Icons.text_fields),
-                              ),
-                              ButtonSegment(
-                                value: 'file',
-                                label: Text('File'),
-                                icon: Icon(Icons.attach_file),
-                              ),
-                            ],
-                            selected: {_materialType},
-                            onSelectionChanged: (sel) {
-                              setDialogState(() => _materialType = sel.first);
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_materialType == 'text') ...[
-                          CustomTextField(
-                            controller: _descriptionController,
-                            hintText: 'Konten',
-                            prefixIcon: Icons.description,
-                            keyboardType: TextInputType.multiline,
-                          ),
-                        ] else ...[
-                          CustomTextField(
-                            controller: _descriptionController,
-                            hintText: 'Deskripsi (opsional)',
-                            prefixIcon: Icons.description,
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: CustomButton(
-                              text: 'Pilih File',
-                              isOutlined: true,
-                              onPressed: () async {
-                                await _pickFile();
-                                if (!context.mounted) return;
-                                setDialogState(() {});
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CustomTextField(
+                              controller: _titleController,
+                              hintText: 'Judul',
+                              prefixIcon: Icons.title,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'Judul tidak boleh kosong';
+                                }
+                                return null;
                               },
                             ),
-                          ),
-                          if (_selectedFileName != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              'File terpilih: $_selectedFileName',
-                              style: const TextStyle(
-                                fontStyle: FontStyle.italic,
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'text',
+                                    label: Text('Teks'),
+                                    icon: Icon(Icons.text_fields),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'file',
+                                    label: Text('File'),
+                                    icon: Icon(Icons.attach_file),
+                                  ),
+                                ],
+                                selected: {_materialType},
+                                onSelectionChanged: (sel) {
+                                  setDialogState(() {
+                                    _materialType = sel.first;
+                                    _fileErrorMessage = null;
+                                  });
+                                },
                               ),
                             ),
+                            const SizedBox(height: 16),
+                            if (_materialType == 'text') ...[
+                              CustomTextField(
+                                controller: _descriptionController,
+                                hintText: 'Konten',
+                                prefixIcon: Icons.description,
+                                keyboardType: TextInputType.multiline,
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Konten tidak boleh kosong';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ] else ...[
+                              CustomTextField(
+                                controller: _descriptionController,
+                                hintText: 'Deskripsi (opsional)',
+                                prefixIcon: Icons.description,
+                                validator: null,
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: CustomButton(
+                                  text: 'Pilih File',
+                                  isOutlined: true,
+                                  onPressed: () async {
+                                    try {
+                                      FilePickerResult? result =
+                                          await FilePicker.platform.pickFiles(
+                                            type: FileType.any,
+                                            allowMultiple: false,
+                                          );
+                                      if (result != null &&
+                                          result.files.isNotEmpty) {
+                                        final pickedFile = result.files.first;
+                                        final fileName = pickedFile.name;
+                                        final ext = path
+                                            .extension(fileName)
+                                            .toLowerCase()
+                                            .replaceAll('.', '');
+
+                                        final allowedExtensions = [
+                                          'ppt',
+                                          'pptx',
+                                          'doc',
+                                          'docx',
+                                          'txt',
+                                          'pdf',
+                                          'png',
+                                          'jpg',
+                                          'jpeg',
+                                          'webm',
+                                          'avif',
+                                          'mp4',
+                                        ];
+
+                                        if (!allowedExtensions.contains(ext)) {
+                                          setDialogState(() {
+                                            _fileErrorMessage =
+                                                'File .$ext tidak didukung!';
+                                            _selectedFileName = null;
+                                            _selectedFilePath = null;
+                                            _selectedFileBytes = null;
+                                          });
+                                          return;
+                                        }
+
+                                        setDialogState(() {
+                                          _selectedFileName = fileName;
+                                          _fileErrorMessage = null;
+
+                                          if (kIsWeb) {
+                                            _selectedFileBytes =
+                                                pickedFile.bytes;
+                                            _selectedFilePath = null;
+                                          } else {
+                                            _selectedFilePath = pickedFile.path;
+                                            _selectedFileBytes = null;
+                                          }
+
+                                          if ([
+                                            'jpg',
+                                            'jpeg',
+                                            'png',
+                                          ].contains(ext)) {
+                                            _materialType = 'image';
+                                          } else {
+                                            _materialType = 'file';
+                                          }
+                                        });
+                                      }
+                                    } catch (e) {
+                                      debugPrint('Error picking file: $e');
+                                      setDialogState(() {
+                                        _fileErrorMessage =
+                                            'Terjadi kesalahan saat memilih file.';
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              if (_selectedFileName != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  'File terpilih: $_selectedFileName',
+                                  style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                              if (_fileErrorMessage != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _fileErrorMessage!,
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ],
-                        ],
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
                       onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+                        if (_materialType != 'text' &&
+                            _selectedFileName == null) {
+                          setDialogState(() {
+                            _fileErrorMessage =
+                                'Silakan pilih file terlebih dahulu';
+                          });
+                          return;
+                        }
+
+                        Navigator.of(dialogContext).pop();
+
                         await _addMaterial();
-                        if (context.mounted) Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Materi berhasil ditambahkan'),
+                          ),
+                        );
                       },
                       child: const Text('Tambah'),
                     ),
@@ -341,6 +551,10 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
   }
 
   void _showEditMaterialDialog(MaterialItem m) {
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+
     _titleController.text = m.title;
     _descriptionController.text = m.description;
     _selectedFileName = m.fileName;
@@ -349,96 +563,135 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     _selectedFileBytes = null;
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (context) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (context, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
                   insetPadding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 24,
                   ),
                   title: const Text('Edit Materi Pembelajaran'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CustomTextField(
-                          controller: _titleController,
-                          hintText: 'Judul',
-                          prefixIcon: Icons.title,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(
-                                value: 'text',
-                                label: Text('Teks'),
-                                icon: Icon(Icons.text_fields),
-                              ),
-                              ButtonSegment(
-                                value: 'file',
-                                label: Text('File'),
-                                icon: Icon(Icons.attach_file),
-                              ),
-                            ],
-                            selected: {_materialType},
-                            onSelectionChanged: (sel) {
-                              setDialogState(() => _materialType = sel.first);
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_materialType == 'text') ...[
-                          CustomTextField(
-                            controller: _descriptionController,
-                            hintText: 'Konten',
-                            prefixIcon: Icons.description,
-                            keyboardType: TextInputType.multiline,
-                          ),
-                        ] else ...[
-                          CustomTextField(
-                            controller: _descriptionController,
-                            hintText: 'Deskripsi (opsional)',
-                            prefixIcon: Icons.description,
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: CustomButton(
-                              text: 'Pilih File',
-                              isOutlined: true,
-                              onPressed: () async {
-                                await _pickFile();
-                                if (!context.mounted) return;
-                                setDialogState(() {});
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CustomTextField(
+                              controller: _titleController,
+                              hintText: 'Judul',
+                              prefixIcon: Icons.title,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'Judul tidak boleh kosong';
+                                }
+                                return null;
                               },
                             ),
-                          ),
-                          if (_selectedFileName != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              'File terpilih: $_selectedFileName',
-                              style: const TextStyle(
-                                fontStyle: FontStyle.italic,
+
+                            const SizedBox(height: 16),
+
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'text',
+                                    label: Text('Teks'),
+                                    icon: Icon(Icons.text_fields),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'file',
+                                    label: Text('File'),
+                                    icon: Icon(Icons.attach_file),
+                                  ),
+                                ],
+                                selected: {_materialType},
+                                onSelectionChanged: (sel) {
+                                  setDialogState(
+                                    () => _materialType = sel.first,
+                                  );
+                                },
                               ),
                             ),
+
+                            const SizedBox(height: 16),
+
+                            if (_materialType == 'text') ...[
+                              CustomTextField(
+                                controller: _descriptionController,
+                                hintText: 'Konten',
+                                prefixIcon: Icons.description,
+                                keyboardType: TextInputType.multiline,
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Konten tidak boleh kosong';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ] else ...[
+                              CustomTextField(
+                                controller: _descriptionController,
+                                hintText: 'Deskripsi (opsional)',
+                                prefixIcon: Icons.description,
+                                validator: null,
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: CustomButton(
+                                  text: 'Pilih File',
+                                  isOutlined: true,
+                                  onPressed: () async {
+                                    await _pickFile();
+                                    if (!dialogContext.mounted) return;
+                                    setDialogState(() {});
+                                  },
+                                ),
+                              ),
+                              if (_selectedFileName != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  'File terpilih: $_selectedFileName',
+                                  style: const TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ],
-                        ],
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
                       onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+
+                        Navigator.of(dialogContext).pop();
+
                         await _updateMaterial(m);
-                        if (context.mounted) Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Materi berhasil diperbarui'),
+                          ),
+                        );
                       },
                       child: const Text('Simpan'),
                     ),
@@ -553,7 +806,7 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
               )
               : ListView.builder(
                 itemCount: _materials.length,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                 itemBuilder: (context, index) {
                   final m = _materials[index];
                   return Card(
@@ -562,6 +815,30 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ListTile(
+                          onTap: () {
+                            setState(() {
+                              if (_isSelectionMode) {
+                                if (_selectedMaterialIds.contains(m.id)) {
+                                  _selectedMaterialIds.remove(m.id);
+                                } else {
+                                  _selectedMaterialIds.add(m.id);
+                                }
+                              }
+                            });
+                          },
+                          onLongPress: () {
+                            setState(() {
+                              if (_selectedMaterialIds.contains(m.id)) {
+                                _selectedMaterialIds.remove(m.id);
+                              } else {
+                                _selectedMaterialIds.add(m.id);
+                              }
+                            });
+                          },
+
+                          selected: _selectedMaterialIds.contains(m.id),
+                          selectedTileColor: Colors.blue.withValues(alpha: 0.1),
+
                           title: Text(
                             m.title,
                             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -570,19 +847,25 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                               m.description.isNotEmpty
                                   ? Text(m.description)
                                   : null,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () => _showEditMaterialDialog(m),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _confirmDeleteMaterial(m),
-                              ),
-                            ],
-                          ),
+
+                          trailing:
+                              _isSelectionMode
+                                  ? null
+                                  : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit),
+                                        onPressed:
+                                            () => _showEditMaterialDialog(m),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete),
+                                        onPressed:
+                                            () => _confirmDeleteMaterial(m),
+                                      ),
+                                    ],
+                                  ),
                         ),
                         if (m.fileType == 'image' && m.fileUrl != null)
                           Padding(
@@ -628,8 +911,12 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                 },
               ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddMaterialDialog,
-        child: const Icon(Icons.add),
+        onPressed:
+            _isSelectionMode
+                ? _confirmDeleteSelectedMaterials
+                : _showAddMaterialDialog,
+        backgroundColor: _isSelectionMode ? Colors.red : null,
+        child: Icon(_isSelectionMode ? Icons.delete : Icons.add),
       ),
     );
   }

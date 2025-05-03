@@ -13,6 +13,9 @@ class ContactsScreen extends StatefulWidget {
 }
 
 class _ContactsScreenState extends State<ContactsScreen> {
+  Set<String> _selectedContactIds = {};
+  bool get _isSelectionMode => _selectedContactIds.isNotEmpty;
+
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -50,10 +53,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
           .from('contacts')
           .select()
           .eq('user_id', supabase.auth.currentUser!.id)
-          .order('name');
+          .order('name', ascending: true);
+
+      final loaded = data.map((contact) => Contact.fromJson(contact)).toList();
+
+      loaded.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
 
       setState(() {
-        _contacts = data.map((contact) => Contact.fromJson(contact)).toList();
+        _contacts = loaded;
       });
     } catch (e) {
       debugPrint('Error loading contacts: $e');
@@ -66,6 +75,25 @@ class _ContactsScreenState extends State<ContactsScreen> {
 
   Future<void> _addContact() async {
     if (_nameController.text.trim().isEmpty) {
+      return;
+    }
+
+    if (!_emailController.text.trim().endsWith('@gmail.com')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email harus menggunakan @gmail.com')),
+      );
+      return;
+    }
+
+    String phone = _phoneController.text.trim();
+    if (!phone.contains(RegExp(r'^[0-9]+$')) || phone.length <= 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nomor telepon harus terdiri dari angka dan lebih dari 10 digit',
+          ),
+        ),
+      );
       return;
     }
 
@@ -93,36 +121,35 @@ class _ContactsScreenState extends State<ContactsScreen> {
           }).select();
 
       if (response.isNotEmpty) {
-        final insertedContact = Contact.fromJson(response.first);
+        final inserted = Contact.fromJson(response.first);
         setState(() {
-          _contacts.add(insertedContact);
+          _contacts.add(inserted);
           _contacts.sort((a, b) => a.name.compareTo(b.name));
         });
-
-        _nameController.clear();
-        _emailController.clear();
-        _phoneController.clear();
-        _roleController.clear();
-        _notesController.clear();
-
-        Navigator.of(context).pop();
       }
     } catch (e) {
       debugPrint('Error adding contact: $e');
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error menambahkan kontak: $e')));
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
-  Future<void> _deleteContact(String contactId) async {
+  Future<void> _deleteSelectedContacts() async {
     try {
-      await supabase.from('contacts').delete().eq('id', contactId);
+      await supabase
+          .from('contacts')
+          .delete()
+          .inFilter('id', _selectedContactIds.toList());
+
       setState(() {
-        _contacts.removeWhere((contact) => contact.id == contactId);
+        _contacts.removeWhere(
+          (contact) => _selectedContactIds.contains(contact.id),
+        );
+        _selectedContactIds.clear();
       });
     } catch (e) {
-      debugPrint('Error deleting contact: $e');
+      debugPrint('Error deleting selected contacts: $e');
     }
   }
 
@@ -152,6 +179,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
     );
   }
 
+  Future<void> _deleteContact(String contactId) async {
+    try {
+      await supabase.from('contacts').delete().eq('id', contactId);
+      setState(() {
+        _contacts.removeWhere((contact) => contact.id == contactId);
+      });
+    } catch (e) {
+      debugPrint('Error deleting contact: $e');
+    }
+  }
+
   Future<void> _callPhone(String phone) async {
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) {
@@ -175,91 +213,153 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   void _showAddContactDialog() {
-    setState(() {
-      _nameController.clear();
-      _emailController.clear();
-      _phoneController.clear();
-      _roleController.clear();
-      _notesController.clear();
-      _contactType = 'lecturer';
-    });
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+
+    _nameController.clear();
+    _emailController.clear();
+    _phoneController.clear();
+    _roleController.clear();
+    _notesController.clear();
+    _contactType = 'lecturer';
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (context) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (context, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 24.0,
+                  ),
                   title: const Text('Tambah Kontak'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
-                              value: 'lecturer',
-                              label: Text('Dosen'),
-                              icon: Icon(Icons.school),
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'lecturer',
+                                    label: Text('Dosen'),
+                                    icon: Icon(Icons.school),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'student',
+                                    label: Text('Mahasiswa'),
+                                    icon: Icon(Icons.person),
+                                  ),
+                                ],
+                                selected: {_contactType},
+                                onSelectionChanged: (sel) {
+                                  setDialogState(
+                                    () => _contactType = sel.first,
+                                  );
+                                },
+                              ),
                             ),
-                            ButtonSegment(
-                              value: 'student',
-                              label: Text('Mahasiswa'),
-                              icon: Icon(Icons.person),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _nameController,
+                              hintText: 'Nama',
+                              prefixIcon: Icons.person,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Nama tidak boleh kosong'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _emailController,
+                              hintText: 'Email',
+                              prefixIcon: Icons.email,
+                              keyboardType: TextInputType.emailAddress,
+                              validator:
+                                  (v) =>
+                                      (v == null ||
+                                              !v.trim().endsWith('@gmail.com'))
+                                          ? 'Email harus menggunakan @gmail.com'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _phoneController,
+                              hintText: 'Telepon',
+                              prefixIcon: Icons.phone,
+                              keyboardType: TextInputType.phone,
+                              validator: (v) {
+                                if (v == null ||
+                                    !RegExp(r'^[0-9]+$').hasMatch(v.trim()) ||
+                                    v.trim().length <= 8) {
+                                  return 'Nomor telepon harus angka dan > 8 digit';
+                                }
+                                return null;
+                              },
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _roleController,
+                              hintText:
+                                  _contactType == 'lecturer'
+                                      ? 'Jurusan/Mata Kuliah'
+                                      : 'Kelas/Jurusan',
+                              prefixIcon: Icons.work,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Field ini tidak boleh kosong'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _notesController,
+                              hintText: 'Catatan (opsional)',
+                              prefixIcon: Icons.note,
+                              validator: null,
                             ),
                           ],
-                          selected: {_contactType},
-                          onSelectionChanged: (Set<String> selection) {
-                            setDialogState(() {
-                              _contactType = selection.first;
-                            });
-                          },
                         ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _nameController,
-                          hintText: 'Nama',
-                          prefixIcon: Icons.person,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _emailController,
-                          hintText: 'Email',
-                          prefixIcon: Icons.email,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _phoneController,
-                          hintText: 'Telepon',
-                          prefixIcon: Icons.phone,
-                          keyboardType: TextInputType.phone,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _roleController,
-                          hintText:
-                              _contactType == 'lecturer'
-                                  ? 'Jurusan/Mata Kuliah'
-                                  : 'Kelas/Jurusan',
-                          prefixIcon: Icons.work,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _notesController,
-                          hintText: 'Catatan (opsional)',
-                          prefixIcon: Icons.note,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
-                      onPressed: _addContact,
+                      onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+
+                        Navigator.of(dialogContext).pop();
+
+                        await _addContact();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Kontak berhasil ditambahkan'),
+                          ),
+                        );
+                      },
                       child: const Text('Tambah'),
                     ),
                   ],
@@ -269,6 +369,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
   }
 
   void _showEditContactDialog(Contact contact) {
+    final parentContext = context;
+    final _formKey = GlobalKey<FormState>();
+    bool _submitted = false;
+
     _contactType = contact.type;
     _nameController.text = contact.name;
     _emailController.text = contact.email;
@@ -277,82 +381,140 @@ class _ContactsScreenState extends State<ContactsScreen> {
     _notesController.text = contact.notes;
 
     showDialog(
-      context: context,
+      context: parentContext,
       builder:
-          (ctx) => StatefulBuilder(
+          (dialogContext) => StatefulBuilder(
             builder:
-                (ctx, setDialogState) => AlertDialog(
+                (dialogContext, setDialogState) => AlertDialog(
+                  insetPadding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 24.0,
+                  ),
                   title: const Text('Edit Kontak'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
-                              value: 'lecturer',
-                              label: Text('Dosen'),
-                              icon: Icon(Icons.school),
+                  content: SizedBox(
+                    width: MediaQuery.of(parentContext).size.width * 0.8,
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: _formKey,
+                        autovalidateMode:
+                            _submitted
+                                ? AutovalidateMode.always
+                                : AutovalidateMode.disabled,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'lecturer',
+                                    label: Text('Dosen'),
+                                    icon: Icon(Icons.school),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'student',
+                                    label: Text('Mahasiswa'),
+                                    icon: Icon(Icons.person),
+                                  ),
+                                ],
+                                selected: {_contactType},
+                                onSelectionChanged: (sel) {
+                                  setDialogState(
+                                    () => _contactType = sel.first,
+                                  );
+                                },
+                              ),
                             ),
-                            ButtonSegment(
-                              value: 'student',
-                              label: Text('Mahasiswa'),
-                              icon: Icon(Icons.person),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _nameController,
+                              hintText: 'Nama',
+                              prefixIcon: Icons.person,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Nama tidak boleh kosong'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _emailController,
+                              hintText: 'Email',
+                              prefixIcon: Icons.email,
+                              keyboardType: TextInputType.emailAddress,
+                              validator:
+                                  (v) =>
+                                      (v == null ||
+                                              !v.trim().endsWith('@gmail.com'))
+                                          ? 'Email harus menggunakan @gmail.com'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _phoneController,
+                              hintText: 'Telepon',
+                              prefixIcon: Icons.phone,
+                              keyboardType: TextInputType.phone,
+                              validator: (v) {
+                                if (v == null ||
+                                    !RegExp(r'^[0-9]+$').hasMatch(v.trim()) ||
+                                    v.trim().length <= 8) {
+                                  return 'Nomor telepon harus angka dan > 8 digit';
+                                }
+                                return null;
+                              },
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _roleController,
+                              hintText:
+                                  _contactType == 'lecturer'
+                                      ? 'Jurusan/Mata Kuliah'
+                                      : 'Kelas/Jurusan',
+                              prefixIcon: Icons.work,
+                              validator:
+                                  (v) =>
+                                      (v == null || v.trim().isEmpty)
+                                          ? 'Field ini tidak boleh kosong'
+                                          : null,
+                            ),
+
+                            const SizedBox(height: 16),
+                            CustomTextField(
+                              controller: _notesController,
+                              hintText: 'Catatan (opsional)',
+                              prefixIcon: Icons.note,
+                              validator: null,
                             ),
                           ],
-                          selected: {_contactType},
-                          onSelectionChanged:
-                              (sel) => setDialogState(() {
-                                _contactType = sel.first;
-                              }),
                         ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _nameController,
-                          hintText: 'Nama',
-                          prefixIcon: Icons.person,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _emailController,
-                          hintText: 'Email',
-                          prefixIcon: Icons.email,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _phoneController,
-                          hintText: 'Telepon',
-                          prefixIcon: Icons.phone,
-                          keyboardType: TextInputType.phone,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _roleController,
-                          hintText:
-                              _contactType == 'lecturer'
-                                  ? 'Jurusan/Mata Kuliah'
-                                  : 'Kelas/Jurusan',
-                          prefixIcon: Icons.work,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _notesController,
-                          hintText: 'Catatan (opsional)',
-                          prefixIcon: Icons.note,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       child: const Text('Batal'),
                     ),
                     TextButton(
                       onPressed: () async {
+                        setDialogState(() => _submitted = true);
+                        if (!_formKey.currentState!.validate()) return;
+
+                        Navigator.of(dialogContext).pop();
+
                         await _updateContact(contact.id);
-                        if (ctx.mounted) Navigator.of(ctx).pop();
+
+                        ScaffoldMessenger.of(parentContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Kontak berhasil diperbarui'),
+                          ),
+                        );
                       },
                       child: const Text('Simpan'),
                     ),
@@ -484,13 +646,56 @@ class _ContactsScreenState extends State<ContactsScreen> {
                             )
                             : ListView.builder(
                               itemCount: _filteredContacts.length,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                16,
+                                16,
+                                80,
+                              ),
                               itemBuilder: (context, index) {
                                 final contact = _filteredContacts[index];
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 16),
                                   child: ListTile(
+                                    onTap: () {
+                                      setState(() {
+                                        if (_isSelectionMode) {
+                                          if (_selectedContactIds.contains(
+                                            contact.id,
+                                          )) {
+                                            _selectedContactIds.remove(
+                                              contact.id,
+                                            );
+                                          } else {
+                                            _selectedContactIds.add(contact.id);
+                                          }
+                                        }
+                                      });
+                                    },
+
+                                    onLongPress: () {
+                                      setState(() {
+                                        if (_selectedContactIds.contains(
+                                          contact.id,
+                                        )) {
+                                          _selectedContactIds.remove(
+                                            contact.id,
+                                          );
+                                        } else {
+                                          _selectedContactIds.add(contact.id);
+                                        }
+                                      });
+                                    },
+
+                                    selected: _selectedContactIds.contains(
+                                      contact.id,
+                                    ),
+
+                                    selectedTileColor: Colors.blue.withOpacity(
+                                      0.1,
+                                    ),
+
                                     leading: CircleAvatar(
                                       backgroundColor:
                                           contact.type == 'lecturer'
@@ -503,12 +708,14 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                         color: Colors.white,
                                       ),
                                     ),
+
                                     title: Text(
                                       contact.name,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
+
                                     subtitle: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -580,25 +787,34 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                           ),
                                       ],
                                     ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          onPressed:
-                                              () => _showEditContactDialog(
-                                                contact,
-                                              ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete),
-                                          onPressed:
-                                              () => _confirmDeleteContact(
-                                                contact.id,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
+
+                                    trailing:
+                                        _isSelectionMode
+                                            ? null
+                                            : Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.edit),
+                                                  onPressed:
+                                                      () =>
+                                                          _showEditContactDialog(
+                                                            contact,
+                                                          ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                  ),
+                                                  onPressed:
+                                                      () =>
+                                                          _confirmDeleteContact(
+                                                            contact.id,
+                                                          ),
+                                                ),
+                                              ],
+                                            ),
+
                                     isThreeLine: true,
                                   ),
                                 );
@@ -608,8 +824,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
                 ],
               ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddContactDialog,
-        child: const Icon(Icons.add),
+        onPressed:
+            _isSelectionMode ? _deleteSelectedContacts : _showAddContactDialog,
+        backgroundColor: _isSelectionMode ? Colors.red : null,
+        child: Icon(_isSelectionMode ? Icons.delete : Icons.add),
       ),
     );
   }
