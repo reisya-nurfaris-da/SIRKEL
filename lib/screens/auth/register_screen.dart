@@ -99,7 +99,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        if (e.toString().contains('User already registered')) {
+          _errorMessage = 'Email sudah terdaftar. Silakan login.';
+        } else {
+          _errorMessage = 'Terjadi kesalahan: ${e.toString()}';
+        }
       });
     } finally {
       if (mounted) {
